@@ -1,0 +1,13 @@
+{
+  "name": "worksense",
+  "version": "1.0.0",
+  "description": "Personal work time & AI activity tracker",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev"
+  },
+  "dependencies": {
+    "electron": "^29.4.6"
+  }
+}

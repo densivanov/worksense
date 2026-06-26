@@ -1,0 +1,14 @@
+# Зависимости (ставятся через npm install)
+node_modules/
+
+# Личные данные пользователя, в репозиторий не попадают
+worksense-data.json
+
+# Локальный бэкап старого дизайна
+index_backup_dark.html
+
+# Системное и логи
+.DS_Store
+Thumbs.db
+*.log
+npm-debug.log*

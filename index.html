@@ -1,0 +1,960 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WorkSense</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@18.3.1",
+    "react/jsx-runtime": "https://esm.sh/react@18.3.1/jsx-runtime",
+    "react-dom": "https://esm.sh/react-dom@18.3.1",
+    "react-dom/client": "https://esm.sh/react-dom@18.3.1/client",
+    "framer-motion": "https://esm.sh/framer-motion@11?external=react,react-dom",
+    "htm": "https://esm.sh/htm@3.1.1"
+  }
+}
+</script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:        #115;       /* overwritten below */
+  --bg:        #121214;
+  --surface:   #1a1a1f;
+  --surface-2: #202027;
+  --raised:    #26262d;
+  --line:      rgba(255,255,255,0.075);
+  --line-2:    rgba(255,255,255,0.14);
+  --t1:        #f1f1ee;
+  --t2:        #9b9ba4;
+  --t3:        #64646d;
+  --accent:    #c2f24a;
+  --accent-d:  #aee036;
+  --accent-ink:#16180c;
+  --accent-w:  rgba(194,242,74,0.10);
+  --accent-gl: rgba(194,242,74,0.30);
+  --red:       #ff6f5b;
+  --serif: 'Bricolage Grotesque', 'Manrope', system-ui, sans-serif;
+  --ff:    'Manrope', system-ui, sans-serif;
+  --fm:    'JetBrains Mono', 'Consolas', monospace;
+  --r:  10px;
+  --rs: 7px;
+  --rl: 14px;
+}
+
+html, body, #root { height: 100%; }
+body {
+  background: var(--bg); color: var(--t1);
+  font-family: var(--ff); font-size: 14px; line-height: 1.5;
+  overflow: hidden; user-select: none;
+  -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+}
+
+/* ambient depth — radial glow top-left, subtle grain */
+body::before {
+  content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background:
+    radial-gradient(900px 520px at 12% -8%, rgba(194,242,74,0.05), transparent 60%),
+    radial-gradient(700px 480px at 100% 0%, rgba(255,111,91,0.035), transparent 55%);
+}
+body::after {
+  content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: 0.35;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.4'/%3E%3C/svg%3E");
+  mix-blend-mode: overlay;
+}
+
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--raised); border-radius: 5px; border: 2px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: #34343c; }
+
+#app { position: relative; z-index: 1; display: flex; flex-direction: column; height: 100vh; }
+
+/* ── Top bar ─────────────────────────────────── */
+#topbar {
+  display: flex; align-items: center; height: 46px; padding: 0 6px 0 18px;
+  border-bottom: 1px solid var(--line); flex-shrink: 0;
+  -webkit-app-region: drag;
+}
+.brand { display: flex; align-items: center; gap: 9px; font-family: var(--serif); font-weight: 700; font-size: 17px; letter-spacing: -0.02em; color: var(--t1); }
+.brand-mark {
+  width: 11px; height: 11px; border-radius: 3px; background: var(--accent);
+  box-shadow: 0 0 14px var(--accent-gl);
+}
+.topclock { margin-left: auto; display: flex; align-items: center; gap: 9px; padding-right: 12px; -webkit-app-region: no-drag; }
+.topclock .clk { font-family: var(--fm); font-size: 13px; font-weight: 500; color: var(--t3); letter-spacing: 0.02em; min-width: 74px; text-align: right; font-variant-numeric: tabular-nums; transition: color 0.3s; }
+.topclock.run .clk { color: var(--accent); }
+.live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+
+.wc { display: flex; height: 100%; -webkit-app-region: no-drag; }
+.wb {
+  width: 44px; height: 100%; display: flex; align-items: center; justify-content: center;
+  border: none; background: transparent; cursor: default; color: var(--t2);
+  transition: background 0.12s, color 0.12s;
+}
+.wb:hover { background: rgba(255,255,255,0.07); color: var(--t1); }
+.wb.close:hover { background: #e0422f; color: #fff; }
+.wb svg { width: 11px; height: 11px; }
+
+/* ── Shell ───────────────────────────────────── */
+#shell { flex: 1; display: flex; min-height: 0; }
+#sidebar {
+  width: 232px; flex-shrink: 0; border-right: 1px solid var(--line);
+  display: flex; flex-direction: column; padding: 16px 14px;
+}
+.side-nav { display: flex; flex-direction: column; gap: 3px; position: relative; }
+.nb {
+  position: relative; display: flex; align-items: center; gap: 12px; width: 100%;
+  background: none; border: none; cursor: pointer; text-align: left;
+  padding: 11px 13px; border-radius: var(--r); color: var(--t2);
+  font-family: var(--ff); font-size: 14px; font-weight: 600; z-index: 1;
+  transition: color 0.16s;
+}
+.nb > span { position: relative; z-index: 1; }
+.nb .idx { font-family: var(--fm); font-size: 11px; color: var(--t3); font-variant-numeric: tabular-nums; transition: color 0.16s; }
+.nb:hover { color: var(--t1); }
+.nb.active { color: var(--t1); }
+.nb.active .idx { color: var(--accent); }
+.nav-pill { position: absolute; inset: 0 0 auto 0; height: 44px; border-radius: var(--r); background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); z-index: 0; }
+
+.side-foot { margin-top: auto; display: flex; flex-direction: column; gap: 8px; padding: 12px 4px; }
+.kbd-row { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--t3); }
+kbd { font-family: var(--fm); font-size: 10px; color: var(--t2); background: var(--surface-2); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; padding: 1px 5px; min-width: 18px; text-align: center; }
+
+#main { flex: 1; overflow-y: auto; overflow-x: hidden; }
+.view { padding: 26px 32px 40px; max-width: 1120px; }
+.eyebrow { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.16em; color: var(--t3); }
+
+/* ── Masthead timer ──────────────────────────── */
+.hero {
+  position: relative; display: flex; align-items: center; justify-content: space-between;
+  gap: 26px; padding: 24px 26px; margin-bottom: 22px; overflow: hidden;
+  background: linear-gradient(180deg, var(--surface), var(--surface) 60%, #18181d);
+  border: 1px solid var(--line); border-radius: var(--rl);
+}
+.hero-glow { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(420px 220px at 8% 120%, var(--accent-w), transparent 70%); opacity: 0; }
+.hero.run .hero-glow { opacity: 1; }
+.hero-clock { display: flex; flex-direction: column; gap: 8px; position: relative; }
+.hero .big {
+  font-family: var(--fm); font-size: 66px; font-weight: 600; line-height: 0.92;
+  letter-spacing: -0.04em; color: var(--t1); font-variant-numeric: tabular-nums;
+  transition: color 0.3s, text-shadow 0.3s;
+}
+.hero.run .big   { color: var(--accent); text-shadow: 0 0 34px var(--accent-gl); }
+.hero.paused .big { color: var(--t2); }
+.hero-controls { display: flex; flex-direction: column; gap: 11px; align-items: stretch; width: 350px; position: relative; }
+.sinput {
+  width: 100%; background: var(--bg); border: 1px solid var(--line); border-radius: var(--r);
+  color: var(--t1); font-family: var(--ff); font-size: 14px; padding: 11px 14px; outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s; user-select: text;
+}
+.sinput:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-w); }
+.sinput::placeholder { color: var(--t3); }
+.tcontrols { display: flex; gap: 9px; }
+.tcontrols .grow { flex: 1; }
+
+/* Buttons */
+.btn { border: 1px solid transparent; border-radius: var(--r); font-family: var(--ff); font-size: 13px; font-weight: 700; cursor: pointer; white-space: nowrap; padding: 11px 20px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
+.btn-accent { background: var(--accent); color: var(--accent-ink); box-shadow: 0 6px 20px -8px var(--accent-gl); }
+.btn-stop   { background: var(--raised); color: var(--t1); border-color: var(--line-2); }
+.btn-soft   { background: var(--surface-2); color: var(--t2); border-color: var(--line); }
+.btn-ghost  { background: transparent; color: var(--t2); border-color: var(--line-2); padding: 11px 16px; }
+.btn-sync   { background: transparent; color: var(--accent-d); border-color: rgba(194,242,74,0.35); padding: 9px 15px; font-size: 12px; }
+.btn-sm { padding: 9px 16px; font-size: 12.5px; }
+.btn svg { width: 14px; height: 14px; flex-shrink: 0; }
+
+/* ── Ledger band ─────────────────────────────── */
+.ledger { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-bottom: 18px; }
+.lcell { background: var(--surface); border: 1px solid var(--line); border-radius: var(--rl); padding: 16px 18px; position: relative; overflow: hidden; }
+.lcell .spark { position: absolute; right: -10px; top: -10px; width: 64px; height: 64px; border-radius: 50%; background: var(--accent-w); filter: blur(8px); opacity: 0; transition: opacity 0.2s; }
+.lcell:hover .spark { opacity: 1; }
+.lval { font-family: var(--serif); font-size: 31px; font-weight: 700; line-height: 1; color: var(--t1); letter-spacing: -0.02em; margin: 11px 0 6px; font-variant-numeric: tabular-nums; }
+.lsub { font-size: 12px; color: var(--t2); }
+
+/* ── Cards ───────────────────────────────────── */
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--rl); padding: 18px 20px; }
+.ctitle { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; gap: 10px; }
+.ctitle .lbl { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.15em; color: var(--t3); }
+.ctitle .note { font-family: var(--fm); font-size: 11px; color: var(--t2); }
+.chart-wrap { position: relative; height: 154px; }
+
+.rtoggle { display: flex; gap: 2px; background: var(--bg); border: 1px solid var(--line); border-radius: var(--rs); padding: 2px; }
+.rb { background: none; border: none; font-family: var(--fm); font-size: 10.5px; color: var(--t2); padding: 4px 10px; border-radius: 4px; cursor: pointer; transition: color 0.12s; position: relative; }
+.rb:hover { color: var(--t1); }
+.rb.active { color: var(--accent-ink); }
+.rb .rb-pill { position: absolute; inset: 0; background: var(--accent); border-radius: 4px; z-index: -1; }
+
+/* ── Lists ───────────────────────────────────── */
+.list { display: flex; flex-direction: column; }
+.row { display: flex; align-items: center; gap: 12px; padding: 11px 6px; border-bottom: 1px solid var(--line); }
+.row:last-child { border-bottom: none; }
+.dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex-shrink: 0; box-shadow: 0 0 8px var(--accent-gl); }
+.row .name { flex: 1; font-size: 13.5px; color: var(--t1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .rng { font-family: var(--fm); font-size: 11px; color: var(--t3); flex-shrink: 0; }
+.row .dur { font-family: var(--serif); font-size: 15px; font-weight: 700; color: var(--t1); min-width: 56px; text-align: right; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.del { background: none; border: none; color: var(--t3); cursor: pointer; padding: 4px 6px; border-radius: 5px; opacity: 0.4; flex-shrink: 0; display: flex; }
+.del:hover { opacity: 1; background: rgba(255,111,91,0.14); color: var(--red); }
+.del svg { width: 11px; height: 11px; }
+
+.badge { font-size: 10.5px; font-weight: 700; padding: 3px 10px; border-radius: 20px; flex-shrink: 0; border: 1px solid; }
+.tok { font-family: var(--serif); font-size: 15px; font-weight: 700; color: var(--t1); flex-shrink: 0; min-width: 56px; font-variant-numeric: tabular-nums; }
+.anote { flex: 1; font-size: 12.5px; color: var(--t2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ats { font-family: var(--fm); font-size: 10.5px; color: var(--t3); flex-shrink: 0; }
+.scroll { max-height: 230px; overflow-y: auto; }
+
+/* ── Donut ───────────────────────────────────── */
+.donut-wrap { display: flex; gap: 22px; align-items: center; }
+.donut-canvas { width: 122px; height: 122px; flex-shrink: 0; position: relative; }
+.donut-legend { flex: 1; display: flex; flex-direction: column; gap: 10px; }
+.dl { display: flex; align-items: center; gap: 10px; }
+.dl .sw { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
+.dl .nm { flex: 1; font-size: 12.5px; color: var(--t2); }
+.dl .pc { font-family: var(--fm); font-size: 11px; color: var(--t3); }
+
+/* ── Forms ───────────────────────────────────── */
+.frow { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+.fg { display: flex; flex-direction: column; gap: 6px; }
+.flabel { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: var(--t3); }
+.fsel, .finp { background: var(--bg); border: 1px solid var(--line); border-radius: var(--rs); color: var(--t1); font-family: var(--ff); font-size: 13.5px; padding: 10px 12px; outline: none; transition: border-color 0.13s, box-shadow 0.13s; user-select: text; }
+.fsel:focus, .finp:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-w); }
+.fsel { appearance: none; padding-right: 30px; cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='5' fill='none'%3E%3Cpath d='M1 1l3.5 3L8 1' stroke='%2364646d' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 11px center; }
+.fsel option { background: var(--surface); color: var(--t1); }
+
+/* ── Section headers ─────────────────────────── */
+.vhead { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 22px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.vtitle { font-family: var(--serif); font-size: 30px; font-weight: 700; letter-spacing: -0.025em; color: var(--t1); }
+.vsub { font-size: 12.5px; color: var(--t2); margin-top: 4px; }
+.daygrp { margin-bottom: 22px; }
+.daylbl { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 5px; padding-bottom: 8px; border-bottom: 1px solid var(--line-2); }
+.dayname { font-family: var(--serif); font-size: 16px; font-weight: 700; color: var(--t1); }
+.daytot { font-family: var(--fm); font-size: 12px; color: var(--t2); }
+
+/* ── Claude banner ───────────────────────────── */
+.cbanner { background: var(--accent-w); border: 1px solid rgba(194,242,74,0.22); border-radius: var(--r); padding: 12px 16px; margin-bottom: 18px; display: flex; align-items: center; justify-content: space-between; font-size: 12.5px; color: var(--accent-d); }
+
+/* ── Heatmap ─────────────────────────────────── */
+.hm-cell { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; transition: transform 0.1s; }
+.hm-cell:hover { transform: scale(1.35); }
+.hm-today { box-shadow: 0 0 0 1.5px var(--accent); }
+.hm-day-label { height: 12px; font-size: 9px; color: var(--t3); line-height: 12px; width: 24px; text-align: right; flex-shrink: 0; font-family: var(--fm); }
+
+/* ── Modal ───────────────────────────────────── */
+.overlay { position: fixed; inset: 0; background: rgba(8,8,10,0.62); display: flex; align-items: center; justify-content: center; z-index: 200; backdrop-filter: blur(4px); }
+.modal { background: var(--surface); border: 1px solid var(--line-2); border-radius: var(--rl); padding: 26px 28px; width: 450px; box-shadow: 0 30px 70px rgba(0,0,0,0.5); }
+.modal-title { font-family: var(--serif); font-size: 22px; font-weight: 700; letter-spacing: -0.02em; color: var(--t1); margin-bottom: 20px; }
+.modal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+.modal-foot { display: flex; justify-content: flex-end; gap: 9px; margin-top: 22px; }
+.ml-dur { font-family: var(--fm); font-size: 11.5px; color: var(--t3); margin-top: 8px; min-height: 16px; }
+
+/* ── Toast ───────────────────────────────────── */
+.toast { position: fixed; bottom: 24px; left: 50%; background: var(--raised); border: 1px solid var(--line-2); border-radius: var(--r); padding: 12px 20px; font-size: 13px; font-weight: 600; color: var(--t1); z-index: 999; white-space: nowrap; box-shadow: 0 16px 40px rgba(0,0,0,0.5); }
+.toast .tk { color: var(--accent); }
+
+.empty { text-align: center; padding: 30px 16px; color: var(--t3); font-size: 13px; font-family: var(--serif); font-style: italic; }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="module">
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import { createRoot } from 'react-dom/client'
+import { motion, AnimatePresence, useReducedMotion, animate as fmAnimate } from 'framer-motion'
+import htm from 'htm'
+const html = htm.bind(React.createElement)
+const M = motion
+
+// ════════════════════════════════ BRIDGE ════════════════════════════════
+const SERVER = 'http://localhost:3456'
+let _mode = 'ls'
+const isElectron = () => typeof window !== 'undefined' && !!window.electronAPI
+
+async function detectMode() {
+  if (window.electronAPI) { _mode = 'electron'; return }
+  try {
+    const r = await fetch(SERVER + '/api/data', { signal: AbortSignal.timeout(800) })
+    if (r.ok || r.status === 200) { _mode = 'server'; return }
+  } catch (e) {}
+  _mode = 'ls'
+}
+async function bridgeLoad() {
+  if (_mode === 'electron') return await window.electronAPI.loadData()
+  if (_mode === 'server') { try { return await (await fetch(SERVER + '/api/data')).json() } catch (e) { return null } }
+  const raw = localStorage.getItem('ws_v1'); if (raw) { try { return JSON.parse(raw) } catch (e) {} }
+  return null
+}
+async function bridgeSave(data) {
+  if (_mode === 'electron') { await window.electronAPI.saveData(data); return }
+  if (_mode === 'server') { try { await fetch(SERVER + '/api/data', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data) }) } catch (e) {} return }
+  try { localStorage.setItem('ws_v1', JSON.stringify(data)) } catch (e) {}
+}
+async function fetchClaudeStats() {
+  if (_mode === 'electron') return await window.electronAPI.readClaudeStats()
+  if (_mode === 'server') { try { return await (await fetch(SERVER + '/api/claude-stats')).json() } catch (e) { return [] } }
+  return []
+}
+const winMin = () => window.electronAPI?.minimize()
+const winMax = () => window.electronAPI?.maximize()
+const winClose = () => window.electronAPI?.close()
+
+// ════════════════════════════════ UTILS ═════════════════════════════════
+const pad = n => String(n).padStart(2,'0')
+const fmtMs = ms => { const s = Math.floor(ms/1000); return `${pad(Math.floor(s/3600))}:${pad(Math.floor((s%3600)/60))}:${pad(s%60)}` }
+const fmtShort = ms => { const h = Math.floor(ms/3600000), m = Math.floor((ms%3600000)/60000); return h>0 ? `${h}h ${m}m` : `${m}m` }
+const fmtHM = ms => `${Math.floor(ms/3600000)}h ${Math.floor((ms%3600000)/60000)}m`
+const fmtTime = ts => { const d = new Date(ts); return `${pad(d.getHours())}:${pad(d.getMinutes())}` }
+const fmtDateTime = ts => { const d = new Date(ts); return `${pad(d.getDate())}.${pad(d.getMonth()+1)} ${pad(d.getHours())}:${pad(d.getMinutes())}` }
+const fmtNum = n => n>=1e6 ? (n/1e6).toFixed(1)+'M' : n>=1e3 ? (n/1e3).toFixed(1)+'K' : String(Math.round(n))
+const dayKey = ts => { const d = new Date(ts); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}` }
+const sameDay = (ts, ref=Date.now()) => dayKey(ts)===dayKey(ref)
+const weekStart = () => { const d = new Date(); const wd = d.getDay(); const back = wd===0?6:wd-1; d.setDate(d.getDate()-back); d.setHours(0,0,0,0); return d.getTime() }
+const weekDaysElapsed = () => { const wd = new Date().getDay(); return wd===0?7:wd }
+function fmtDayLabel(dk) {
+  const [y,m,d] = dk.split('-').map(Number)
+  const date = new Date(y,m-1,d), today = new Date(); today.setHours(0,0,0,0)
+  const yest = new Date(today); yest.setDate(yest.getDate()-1)
+  if (date.getTime()===today.getTime()) return 'Today'
+  if (date.getTime()===yest.getTime()) return 'Yesterday'
+  return date.toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'})
+}
+
+const TOOLS = {
+  'Claude Code': { ch:'#c2f24a' }, 'Claude.ai': { ch:'#b18cff' }, 'Cursor': { ch:'#62d4c4' },
+  'ChatGPT': { ch:'#34d6a8' }, 'Copilot': { ch:'#ff7a5c' }, 'Gemini': { ch:'#ffb74d' }, 'Other': { ch:'#8a8a92' }
+}
+const tc = t => (TOOLS[t] || TOOLS['Other']).ch
+const CC = { t1:'#f1f1ee', t2:'#9b9ba4', t3:'#64646d', accent:'#c2f24a', accentS:'rgba(194,242,74,0.85)', surf:'#1a1a1f', line:'rgba(255,255,255,0.09)', grid:'rgba(255,255,255,0.05)', faint:'rgba(255,255,255,0.05)', ink16:'rgba(255,255,255,0.16)' }
+const EASE = [0.22, 1, 0.36, 1]
+
+// ════════════════════════════════ ICONS ═════════════════════════════════
+const Ic = {
+  min: html`<svg viewBox="0 0 12 12" fill="none"><path d="M2 6h8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>`,
+  max: html`<svg viewBox="0 0 12 12" fill="none"><rect x="2.2" y="2.2" width="7.6" height="7.6" rx="1.4" stroke="currentColor" stroke-width="1.2"/></svg>`,
+  close: html`<svg viewBox="0 0 12 12" fill="none"><path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>`,
+  x: html`<svg viewBox="0 0 12 12" fill="none"><path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`,
+  play: html`<svg viewBox="0 0 14 14" fill="currentColor"><path d="M3 2.2v9.6a.6.6 0 0 0 .92.5l7.3-4.8a.6.6 0 0 0 0-1L3.92 1.7A.6.6 0 0 0 3 2.2Z"/></svg>`,
+  stop: html`<svg viewBox="0 0 14 14" fill="currentColor"><rect x="3" y="3" width="8" height="8" rx="1.6"/></svg>`,
+  pause: html`<svg viewBox="0 0 14 14" fill="currentColor"><rect x="3.4" y="2.8" width="2.6" height="8.4" rx="1"/><rect x="8" y="2.8" width="2.6" height="8.4" rx="1"/></svg>`,
+  plus: html`<svg viewBox="0 0 14 14" fill="none"><path d="M7 2.6v8.8M2.6 7h8.8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`,
+  sync: html`<svg viewBox="0 0 14 14" fill="none"><path d="M11.5 7a4.5 4.5 0 1 1-1.3-3.2M11.5 2v2.8H8.7" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+}
+
+// ════════════════════════════════ CHART ═════════════════════════════════
+function ChartCanvas({ build, deps }) {
+  const ref = useRef(null), chart = useRef(null)
+  useEffect(() => {
+    if (!ref.current || !window.Chart) return
+    chart.current = new window.Chart(ref.current.getContext('2d'), build())
+    return () => { chart.current?.destroy() }
+  }, deps)
+  return html`<canvas ref=${ref}></canvas>`
+}
+function cOpts(ttFn, maxY, sfx) {
+  const o = {
+    responsive: true, maintainAspectRatio: false, animation: { duration: 650, easing: 'easeOutQuart' },
+    plugins: { legend: { display: false },
+      tooltip: { backgroundColor: CC.surf, borderColor: CC.line, borderWidth: 1, titleColor: CC.t2, bodyColor: CC.t1, padding: 9, cornerRadius: 8, displayColors: false,
+        titleFont: { family: 'Manrope', size: 11 }, bodyFont: { family: 'JetBrains Mono', size: 12 }, callbacks: { label: c => ' ' + ttFn(c.raw) } } },
+    scales: {
+      x: { grid: { display: false }, border: { color: CC.line }, ticks: { color: CC.t3, font: { size: 10, family: 'Manrope' } } },
+      y: { grid: { color: CC.grid }, border: { display: false }, ticks: { color: CC.t3, font: { size: 10, family: 'JetBrains Mono' }, callback: v => v + sfx }, min: 0 }
+    }
+  }
+  if (maxY !== undefined) o.scales.y.max = maxY
+  return o
+}
+
+// ════════════════════════════════ NUMBER ════════════════════════════════
+function AnimatedNumber({ value, format }) {
+  const [disp, setDisp] = useState(value)
+  const prev = useRef(value), reduce = useReducedMotion()
+  useEffect(() => {
+    if (reduce || prev.current === value) { setDisp(value); prev.current = value; return }
+    const controls = fmAnimate(prev.current, value, { duration: 0.6, ease: EASE, onUpdate: v => setDisp(v) })
+    prev.current = value
+    return () => controls.stop()
+  }, [value])
+  return html`<span>${format ? format(disp) : Math.round(disp)}</span>`
+}
+
+// ════════════════════════════════ APP ═══════════════════════════════════
+const VIEWS = [ { id:'dashboard', label:'Dashboard' }, { id:'sessions', label:'Sessions' }, { id:'ai', label:'AI Activity' } ]
+
+function App() {
+  const reduce = useReducedMotion()
+  const [ready, setReady] = useState(false)
+  const [electron, setElectron] = useState(false)
+  const [view, setView] = useState('dashboard')
+  const [data, setData] = useState({ sessions: [], aiLogs: [] })
+  const [rev, setRev] = useState(0)
+  const [range, setRange] = useState(14)
+  const [toast, setToast] = useState(null)
+  const [modal, setModal] = useState(false)
+  const [claudeBanner, setClaudeBanner] = useState(null)
+
+  // timer
+  const [timer, setTimer] = useState({ active:false, paused:false, startTime:null, accMs:0 })
+  const [elapsed, setElapsed] = useState(0)
+  const tickRef = useRef(null)
+  const sinputRef = useRef(null)
+
+  const toastTimer = useRef(null)
+  const showToast = useCallback((node) => {
+    setToast(node); clearTimeout(toastTimer.current)
+    toastTimer.current = setTimeout(() => setToast(null), 2800)
+  }, [])
+
+  // load
+  useEffect(() => { (async () => {
+    await detectMode(); setElectron(_mode === 'electron')
+    const d = await bridgeLoad()
+    if (d) setData({ sessions: d.sessions || [], aiLogs: d.aiLogs || [] })
+    setReady(true)
+  })() }, [])
+
+  // persist (skip first)
+  const firstSave = useRef(true)
+  useEffect(() => {
+    if (!ready) return
+    if (firstSave.current) { firstSave.current = false; return }
+    bridgeSave(data)
+  }, [data, ready])
+
+  const bump = () => setRev(r => r + 1)
+  const addSession = s => { setData(d => ({ ...d, sessions: [...d.sessions, s] })); bump() }
+  const removeSession = id => { setData(d => ({ ...d, sessions: d.sessions.filter(s => s.id !== id) })); bump() }
+  const addLog = l => { setData(d => ({ ...d, aiLogs: [...d.aiLogs, l] })); bump() }
+  const removeLog = id => { setData(d => ({ ...d, aiLogs: d.aiLogs.filter(l => l.id !== id) })); bump() }
+
+  // ── timer control ──
+  const startTimer = () => {
+    const t = { active:true, paused:false, startTime:Date.now(), accMs:0 }
+    setTimer(t); setElapsed(0)
+    clearInterval(tickRef.current)
+    tickRef.current = setInterval(() => setElapsed(Date.now() - t.startTime + 0), 250)
+  }
+  const stopTimer = () => {
+    setTimer(prev => {
+      if (!prev.active) return prev
+      const totalMs = prev.paused ? prev.accMs : prev.accMs + (Date.now() - prev.startTime)
+      const label = (sinputRef.current?.value || '').trim() || 'Work Session'
+      clearInterval(tickRef.current)
+      addSession({ id: Date.now().toString(), label, start: Date.now()-totalMs, end: Date.now(), duration: totalMs })
+      if (sinputRef.current) sinputRef.current.value = ''
+      window.electronAPI?.timerUpdate({ running:false, time:'00:00:00' })
+      setElapsed(0)
+      return { active:false, paused:false, startTime:null, accMs:0 }
+    })
+  }
+  const togglePause = () => {
+    setTimer(prev => {
+      if (!prev.active) return prev
+      if (!prev.paused) {
+        clearInterval(tickRef.current)
+        const acc = prev.accMs + (Date.now() - prev.startTime)
+        setElapsed(acc)
+        window.electronAPI?.timerUpdate({ running:false, time:fmtMs(acc) })
+        return { ...prev, paused:true, accMs:acc, startTime:null }
+      } else {
+        const st = Date.now()
+        clearInterval(tickRef.current)
+        tickRef.current = setInterval(() => setElapsed(prev.accMs + (Date.now() - st)), 250)
+        return { ...prev, paused:false, startTime:st }
+      }
+    })
+  }
+  const toggleTimer = () => { timer.active ? stopTimer() : startTimer() }
+
+  useEffect(() => {
+    if (timer.active && !timer.paused) window.electronAPI?.timerUpdate({ running:true, time:fmtMs(elapsed) })
+  }, [elapsed, timer.active, timer.paused])
+
+  // ── claude banner ──
+  useEffect(() => { if (!ready || _mode === 'ls') return; (async () => {
+    try {
+      const stats = await fetchClaudeStats()
+      const todayTok = stats.filter(s => sameDay(new Date(s.date+'T12:00:00').getTime())).reduce((a,s)=>a+s.tokens,0)
+      const logged = data.aiLogs.filter(l => l.tool==='Claude Code' && sameDay(l.ts) && l.auto).reduce((a,l)=>a+l.tokens,0)
+      setClaudeBanner(todayTok > 0 && todayTok > logged ? todayTok : null)
+    } catch (e) { setClaudeBanner(null) }
+  })() }, [ready, rev])
+
+  const syncClaude = async () => {
+    if (_mode === 'ls') { showToast('Run server.js to enable Claude Code sync'); return }
+    showToast('Syncing Claude Code…')
+    try {
+      const stats = await fetchClaudeStats()
+      let added = 0, newLogs = []
+      for (const day of stats) {
+        const dayTs = new Date(day.date+'T12:00:00').getTime()
+        const already = data.aiLogs.filter(l => l.tool==='Claude Code' && l.auto && dayKey(l.ts)===day.date).reduce((a,l)=>a+l.tokens,0)
+        const newTok = day.tokens - already
+        if (newTok > 0) { newLogs.push({ id:`cc-${day.date}-${Date.now()}`, tool:'Claude Code', tokens:newTok, note:`Auto-synced (${day.requests} req)`, ts:dayTs, auto:true }); added += newTok }
+      }
+      if (added > 0) { setData(d => ({ ...d, aiLogs: [...d.aiLogs, ...newLogs] })); bump(); showToast(html`Synced <span class="tk">${fmtNum(added)}</span> tokens`) }
+      else showToast('Already up to date')
+      setClaudeBanner(null)
+    } catch (e) { showToast('Sync failed') }
+  }
+
+  const logAI = (tool, tokens, note) => {
+    addLog({ id: Date.now().toString(), tool, tokens, note, ts: Date.now() })
+    showToast(html`Logged <span class="tk">${fmtNum(tokens)}</span> ${tool} tokens`)
+  }
+  const submitManual = (s) => { addSession(s); setModal(false); showToast(html`Added <span class="tk">${fmtShort(s.duration)}</span> — ${s.label}`) }
+  const exportData = () => {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type:'application/json' })
+    const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download:`worksense-${dayKey(Date.now())}.json` })
+    a.click(); URL.revokeObjectURL(a.href); showToast('Data exported')
+  }
+
+  // ── keyboard ──
+  useEffect(() => {
+    const h = e => {
+      const k = e.key
+      if ((e.ctrlKey||e.metaKey) && k==='Enter') toggleTimer()
+      if ((e.ctrlKey||e.metaKey) && k===' ') { e.preventDefault(); togglePause() }
+      if ((e.ctrlKey||e.metaKey) && k==='1') setView('dashboard')
+      if ((e.ctrlKey||e.metaKey) && k==='2') setView('sessions')
+      if ((e.ctrlKey||e.metaKey) && k==='3') setView('ai')
+      if ((e.ctrlKey||e.metaKey) && (k==='l'||k==='L')) { e.preventDefault(); setModal(true) }
+      if (k==='Escape') setModal(false)
+    }
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+  })
+
+  const running = timer.active && !timer.paused
+  const clockStr = timer.active ? fmtMs(elapsed) : '00:00:00'
+
+  return html`
+    <div id="app">
+      <${TopBar} electron=${electron} running=${running} clock=${clockStr} />
+      <div id="shell">
+        <${Sidebar} view=${view} setView=${setView} />
+        <div id="main">
+          <${AnimatePresence} mode="wait">
+            ${view==='dashboard' && html`<${ViewWrap} key="d">
+              <${Dashboard} data=${data} rev=${rev} range=${range} setRange=${setRange}
+                timer=${timer} elapsed=${elapsed} clockStr=${clockStr} running=${running}
+                toggleTimer=${toggleTimer} togglePause=${togglePause} openModal=${()=>setModal(true)}
+                sinputRef=${sinputRef} claudeBanner=${claudeBanner} syncClaude=${syncClaude} reduce=${reduce} />
+            <//>`}
+            ${view==='sessions' && html`<${ViewWrap} key="s">
+              <${Sessions} data=${data} removeSession=${removeSession} openModal=${()=>setModal(true)} exportData=${exportData} reduce=${reduce} />
+            <//>`}
+            ${view==='ai' && html`<${ViewWrap} key="a">
+              <${AIView} data=${data} rev=${rev} range=${range} logAI=${logAI} removeLog=${removeLog} syncClaude=${syncClaude} reduce=${reduce} />
+            <//>`}
+          <//>
+        </div>
+      </div>
+
+      <${AnimatePresence}>
+        ${modal && html`<${ManualModal} key="m" onClose=${()=>setModal(false)} onSubmit=${submitManual} showToast=${showToast} />`}
+      <//>
+      <${AnimatePresence}>
+        ${toast && html`<${M.div} key="t" class="toast" initial=${{ opacity:0, y:20, x:'-50%' }} animate=${{ opacity:1, y:0, x:'-50%' }} exit=${{ opacity:0, y:12, x:'-50%' }} transition=${{ duration:0.28, ease:EASE }}>${toast}<//>`}
+      <//>
+    </div>`
+}
+
+// ── Top bar ──
+function TopBar({ electron, running, clock }) {
+  return html`<div id="topbar">
+    <div class="brand"><span class="brand-mark"></span>WorkSense</div>
+    <div class=${'topclock' + (running?' run':'')}>
+      ${running && html`<${M.span} class="live-dot" animate=${{ opacity:[1,0.35,1], scale:[1,0.85,1] }} transition=${{ duration:1.7, repeat:Infinity, ease:'easeInOut' }} />`}
+      <span class="clk">${clock}</span>
+    </div>
+    ${electron && html`<div class="wc">
+      <button class="wb" onClick=${winMin}>${Ic.min}</button>
+      <button class="wb" onClick=${winMax}>${Ic.max}</button>
+      <button class="wb close" onClick=${winClose}>${Ic.close}</button>
+    </div>`}
+  </div>`
+}
+
+// ── Sidebar with shared-layout active pill ──
+function Sidebar({ view, setView }) {
+  return html`<aside id="sidebar">
+    <nav class="side-nav">
+      ${VIEWS.map((v, i) => html`
+        <button class=${'nb' + (view===v.id?' active':'')} key=${v.id} onClick=${()=>setView(v.id)}>
+          ${view===v.id && html`<${M.span} class="nav-pill" layoutId="navpill" transition=${{ type:'spring', stiffness:520, damping:40 }} />`}
+          <span class="idx">${'0'+(i+1)}</span><span>${v.label}</span>
+        </button>`)}
+    </nav>
+    <div class="side-foot">
+      <div class="kbd-row"><kbd>Ctrl</kbd><kbd>↵</kbd><span>start / stop</span></div>
+      <div class="kbd-row"><kbd>Ctrl</kbd><kbd>Spc</kbd><span>pause</span></div>
+      <div class="kbd-row"><kbd>Ctrl</kbd><kbd>L</kbd><span>log session</span></div>
+    </div>
+  </aside>`
+}
+
+function ViewWrap({ children }) {
+  return html`<${M.div} class="view" initial=${{ opacity:0, y:14 }} animate=${{ opacity:1, y:0 }} exit=${{ opacity:0, y:-10 }} transition=${{ duration:0.32, ease:EASE }}>${children}<//>`
+}
+
+// ── Dashboard ──
+function Dashboard({ data, rev, range, setRange, timer, elapsed, clockStr, running, toggleTimer, togglePause, openModal, sinputRef, claudeBanner, syncClaude, reduce }) {
+  const stats = useMemo(() => {
+    const todaySess = data.sessions.filter(s => sameDay(s.start))
+    const todayMs = todaySess.reduce((a,s)=>a+s.duration,0)
+    const wkMs = data.sessions.filter(s => s.start >= weekStart()).reduce((a,s)=>a+s.duration,0)
+    const todayLogs = data.aiLogs.filter(l => sameDay(l.ts))
+    const todayTok = todayLogs.reduce((a,l)=>a+l.tokens,0)
+    const days = new Set(data.sessions.map(s => dayKey(s.start)))
+    let streak = 0; const d = new Date()
+    for (let i=0;i<365;i++){ if (days.has(dayKey(d.getTime()))) { streak++; d.setDate(d.getDate()-1) } else break }
+    return { todaySess, todayMs, wkMs, todayLogs, todayTok, streak, weekDays: weekDaysElapsed() }
+  }, [rev])
+
+  const stagger = reduce ? {} : { animate:'show', initial:'hidden', variants:{ show:{ transition:{ staggerChildren:0.06, delayChildren:0.05 } } } }
+  const item = reduce ? {} : { variants:{ hidden:{ opacity:0, y:16 }, show:{ opacity:1, y:0, transition:{ duration:0.4, ease:EASE } } } }
+
+  const paused = timer.active && timer.paused
+  const heroCls = 'hero' + (running?' run':'') + (paused?' paused':'')
+
+  return html`<${M.div} ...${stagger}>
+    <${M.section} class=${heroCls} ...${item}>
+      <div class="hero-glow"></div>
+      <div class="hero-clock">
+        <div class="eyebrow">${running?'Recording':paused?'Paused':'Ready to track'}</div>
+        <div class="big">${clockStr}</div>
+      </div>
+      <div class="hero-controls">
+        <input class="sinput" ref=${sinputRef} type="text" placeholder="What are you working on?" maxlength="100" />
+        <div class="tcontrols">
+          <${M.button} class=${'btn grow ' + (timer.active?'btn-stop':'btn-accent')} whileHover=${{ scale:1.02 }} whileTap=${{ scale:0.97 }} onClick=${toggleTimer}>
+            ${timer.active?Ic.stop:Ic.play}${timer.active?'Stop':'Start'}<//>
+          ${timer.active && html`<${M.button} class="btn btn-soft" whileHover=${{ scale:1.02 }} whileTap=${{ scale:0.97 }} onClick=${togglePause}>${paused?Ic.play:Ic.pause}${paused?'Resume':'Pause'}<//>`}
+          <${M.button} class="btn btn-ghost" whileHover=${{ scale:1.02 }} whileTap=${{ scale:0.97 }} onClick=${openModal} title="Log a past session (Ctrl+L)">${Ic.plus}Log<//>
+        </div>
+      </div>
+    <//>
+
+    <${AnimatePresence}>
+      ${claudeBanner && html`<${M.div} key="cb" class="cbanner" initial=${{ opacity:0, height:0, marginBottom:0 }} animate=${{ opacity:1, height:'auto', marginBottom:18 }} exit=${{ opacity:0, height:0, marginBottom:0 }}>
+        <span>Claude Code: <b>${fmtNum(claudeBanner)}</b> tokens detected today</span>
+        <${M.button} class="btn btn-sync" whileTap=${{ scale:0.96 }} onClick=${syncClaude}>${Ic.sync}Sync Tokens<//>
+      <//>`}
+    <//>
+
+    <${M.section} class="ledger" ...${item}>
+      <${Stat} label="Today" value=${stats.todayMs} format=${fmtHM} sub=${`${stats.todaySess.length} session${stats.todaySess.length!==1?'s':''}`} />
+      <${Stat} label="This Week" value=${stats.wkMs} format=${v=>`${(v/3600000).toFixed(1)}h`} sub=${`avg ${(stats.wkMs/stats.weekDays/3600000).toFixed(1)}h/day`} />
+      <${Stat} label="AI Tokens Today" value=${stats.todayTok} format=${fmtNum} sub=${`${stats.todayLogs.length} request${stats.todayLogs.length!==1?'s':''}`} />
+      <${Stat} label="Work Streak" value=${stats.streak} format=${v=>String(Math.round(v))} sub="days in a row" />
+    <//>
+
+    <${M.div} class="grid2" ...${item}>
+      <div class="card">
+        <div class="ctitle"><span class="lbl">Today's Timeline</span><span class="note">${stats.todayMs>0?`${(stats.todayMs/3600000).toFixed(1)}h`:''}</span></div>
+        <div class="chart-wrap"><${ChartCanvas} deps=${[rev]} build=${() => hourlyConfig(data)} /></div>
+      </div>
+      <div class="card">
+        <div class="ctitle">
+          <span class="lbl">Activity · Last ${range} Days</span>
+          <${RangeToggle} range=${range} setRange=${setRange} />
+        </div>
+        <div class="chart-wrap"><${ChartCanvas} deps=${[rev, range]} build=${() => weeklyConfig(data, range)} /></div>
+      </div>
+    <//>
+
+    <${M.div} class="grid2" ...${item}>
+      <div class="card">
+        <div class="ctitle"><span class="lbl">Recent Sessions</span></div>
+        <div class="list scroll"><${RecentList} data=${data} reduce=${reduce} /></div>
+      </div>
+      <div class="card">
+        <div class="ctitle"><span class="lbl">AI Usage Breakdown</span></div>
+        <${Donut} data=${data} rev=${rev} id="d1" />
+      </div>
+    <//>
+
+    <${M.div} class="card" ...${item}>
+      <${Heatmap} data=${data} rev=${rev} />
+    <//>
+  <//>`
+}
+
+function Stat({ label, value, format, sub }) {
+  return html`<div class="lcell"><div class="spark"></div>
+    <div class="eyebrow">${label}</div>
+    <div class="lval"><${AnimatedNumber} value=${value} format=${format} /></div>
+    <div class="lsub">${sub}</div>
+  </div>`
+}
+
+function RangeToggle({ range, setRange }) {
+  return html`<div class="rtoggle">
+    ${[7,14,30].map(n => html`<button key=${n} class=${'rb'+(range===n?' active':'')} onClick=${()=>setRange(n)}>
+      ${range===n && html`<${M.span} class="rb-pill" layoutId="rangepill" transition=${{ type:'spring', stiffness:520, damping:40 }} />`}${n}d
+    </button>`)}
+  </div>`
+}
+
+function RecentList({ data, reduce }) {
+  const all = [...data.sessions].reverse().slice(0, 8)
+  if (!all.length) return html`<div class="empty">No sessions yet</div>`
+  return html`${all.map((s, i) => html`<${M.div} class="row" key=${s.id}
+    initial=${reduce?false:{ opacity:0, x:-10 }} animate=${{ opacity:1, x:0 }} transition=${{ duration:0.3, delay:i*0.035, ease:EASE }}>
+    <span class="dot"></span>
+    <span class="name">${s.label}</span>
+    <span class="rng">${fmtTime(s.start)}${s.end?'–'+fmtTime(s.end):''}</span>
+    <span class="dur">${fmtShort(s.duration)}</span>
+  <//>`)}`
+}
+
+// ── Donut ──
+function Donut({ data, rev, id }) {
+  const entries = useMemo(() => {
+    const by = {}; data.aiLogs.forEach(l => { by[l.tool] = (by[l.tool]||0) + l.tokens })
+    return Object.entries(by).sort((a,b)=>b[1]-a[1])
+  }, [rev])
+  const total = entries.reduce((a,e)=>a+e[1],0)
+  return html`<div class="donut-wrap" style=${{ height:'132px' }}>
+    <div class="donut-canvas"><${ChartCanvas} deps=${[rev]} build=${() => donutConfig(entries)} /></div>
+    <div class="donut-legend">
+      ${entries.length===0 ? html`<div class="empty" style=${{ padding:0, fontSize:'12px' }}>No AI activity logged</div>`
+        : entries.slice(0,6).map(([t,v]) => html`<${M.div} class="dl" key=${t} initial=${{ opacity:0, x:8 }} animate=${{ opacity:1, x:0 }} transition=${{ duration:0.3, ease:EASE }}>
+            <span class="sw" style=${{ background:tc(t) }}></span><span class="nm">${t}</span><span class="pc">${((v/total)*100).toFixed(0)}%</span>
+          <//>`)}
+    </div>
+  </div>`
+}
+
+// ── Heatmap ──
+function Heatmap({ data, rev }) {
+  const reduce = useReducedMotion()
+  const { weeks, monthLabels, totalH, COLORS, todayKey, todayTs, GAP } = useMemo(() => {
+    const GAP = 3, WEEKS = 52
+    const MO = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+    const COLORS = ['rgba(255,255,255,0.05)','rgba(194,242,74,0.18)','rgba(194,242,74,0.34)','rgba(194,242,74,0.55)','rgba(194,242,74,0.78)','#c2f24a']
+    const todayTs = new Date(); todayTs.setHours(23,59,59,999)
+    const start = new Date(); start.setDate(start.getDate()-WEEKS*7); start.setDate(start.getDate()-start.getDay()); start.setHours(0,0,0,0)
+    const dayH = {}; data.sessions.forEach(s => { const k = dayKey(s.start); dayH[k] = (dayH[k]||0) + s.duration/3600000 })
+    const weeks = []; const cur = new Date(start)
+    while (cur <= todayTs) { const wk = []; for (let d=0; d<7; d++){ const dt = new Date(cur); wk.push({ key:dayKey(dt.getTime()), h:dayH[dayKey(dt.getTime())]||0, future: dt>todayTs }); cur.setDate(cur.getDate()+1) } weeks.push(wk) }
+    const UNIT = 12 + GAP
+    const monthLabels = []; weeks.forEach((wk, wi) => { const k = wk[1].key, dd = Number(k.split('-')[2]); if (wi===0 || dd<=7) monthLabels.push({ x: wi*UNIT, label: MO[Number(k.split('-')[1])-1] }) })
+    const totalH = Object.values(dayH).reduce((a,v)=>a+v,0)
+    return { weeks, monthLabels, totalH, COLORS, todayKey: dayKey(Date.now()), todayTs, GAP }
+  }, [rev])
+  const lvl = h => !h?0:h<1?1:h<3?2:h<5?3:h<7?4:5
+  const gridW = weeks.length*(12+GAP)
+  return html`<div>
+    <div class="ctitle"><span class="lbl">Activity Heatmap · Past Year</span><span class="note">${totalH>0?`${Math.round(totalH)}h total`:''}</span></div>
+    <div style=${{ display:'flex', gap:'6px', alignItems:'flex-start' }}>
+      <div style=${{ display:'flex', flexDirection:'column', gap:GAP+'px', paddingTop:'20px', flexShrink:0 }}>
+        ${['','Mon','','Wed','','Fri',''].map((l,i) => html`<div class="hm-day-label" key=${i}>${l}</div>`)}
+      </div>
+      <div style=${{ overflowX:'auto', flex:1, minWidth:0 }}>
+        <div style=${{ position:'relative', height:'18px', width:gridW+'px', marginBottom:'4px' }}>
+          ${monthLabels.map((m,i) => html`<span key=${i} style=${{ position:'absolute', left:m.x+'px', fontSize:'10px', color:'var(--t3)', fontFamily:'var(--fm)' }}>${m.label}</span>`)}
+        </div>
+        <${M.div} style=${{ display:'flex', gap:GAP+'px' }} initial=${reduce?false:{ opacity:0 }} animate=${{ opacity:1 }} transition=${{ duration:0.5, ease:EASE }}>
+          ${weeks.map((wk, wi) => html`<div key=${wi} style=${{ display:'flex', flexDirection:'column', gap:GAP+'px' }}>
+            ${wk.map((d,di) => html`<div key=${di} class=${'hm-cell'+(d.key===todayKey?' hm-today':'')} title=${d.future?'':(d.h>0?`${d.key}: ${d.h.toFixed(1)}h`:`${d.key}: no work`)} style=${{ background: d.future?'transparent':COLORS[lvl(d.h)] }}></div>`)}
+          </div>`)}
+        <//>
+        <div style=${{ display:'flex', alignItems:'center', gap:'4px', marginTop:'12px', justifyContent:'flex-end' }}>
+          <span style=${{ fontSize:'10px', color:'var(--t3)', fontFamily:'var(--fm)' }}>Less</span>
+          ${COLORS.map((c,i) => html`<div key=${i} class="hm-cell" style=${{ background:c }}></div>`)}
+          <span style=${{ fontSize:'10px', color:'var(--t3)', fontFamily:'var(--fm)' }}>More</span>
+        </div>
+      </div>
+    </div>
+  </div>`
+}
+
+// ── Sessions view ──
+function Sessions({ data, removeSession, openModal, exportData, reduce }) {
+  const groups = useMemo(() => {
+    const g = {}; [...data.sessions].reverse().forEach(s => { const k = dayKey(s.start); (g[k] ||= []).push(s) }); return g
+  }, [data.sessions])
+  const keys = Object.keys(groups)
+  return html`<div>
+    <div class="vhead">
+      <div><div class="vtitle">Work Sessions</div><div class="vsub">Every tracked and logged work block.</div></div>
+      <div style=${{ display:'flex', gap:'9px' }}>
+        <${M.button} class="btn btn-accent btn-sm" whileHover=${{ scale:1.03 }} whileTap=${{ scale:0.96 }} onClick=${openModal}>${Ic.plus}Add Session<//>
+        <${M.button} class="btn btn-ghost btn-sm" whileHover=${{ scale:1.03 }} whileTap=${{ scale:0.96 }} onClick=${exportData}>Export JSON<//>
+      </div>
+    </div>
+    ${keys.length===0 ? html`<div class="empty" style=${{ padding:'48px' }}>No sessions yet. Start the timer.</div>`
+      : keys.map(dk => html`<div class="daygrp" key=${dk}>
+          <div class="daylbl"><span class="dayname">${fmtDayLabel(dk)}</span><span class="daytot">${fmtShort(groups[dk].reduce((a,s)=>a+s.duration,0))}</span></div>
+          <div class="list">
+            ${groups[dk].map((s,i) => html`<${M.div} class="row" key=${s.id} layout
+              initial=${reduce?false:{ opacity:0, y:8 }} animate=${{ opacity:1, y:0 }} transition=${{ duration:0.28, delay:Math.min(i*0.025,0.3), ease:EASE }}>
+              <span class="dot"></span>
+              <span class="name">${s.label}</span>
+              <span class="rng">${fmtTime(s.start)}${s.end?'–'+fmtTime(s.end):''}</span>
+              <span class="dur">${fmtShort(s.duration)}</span>
+              <button class="del" onClick=${()=>removeSession(s.id)}>${Ic.x}</button>
+            <//>`)}
+          </div>
+        </div>`)}
+  </div>`
+}
+
+// ── AI view ──
+function AIView({ data, rev, range, logAI, removeLog, syncClaude, reduce }) {
+  const [tool, setTool] = useState('Claude Code')
+  const tokRef = useRef(null), noteRef = useRef(null)
+  const submit = () => {
+    const t = parseInt(tokRef.current?.value)
+    if (!t || t<=0) { tokRef.current?.focus(); return }
+    logAI(tool, t, (noteRef.current?.value||'').trim())
+    tokRef.current.value = ''; noteRef.current.value = ''
+  }
+  const all = [...data.aiLogs].reverse()
+  return html`<div>
+    <div class="vhead">
+      <div><div class="vtitle">AI Activity</div><div class="vsub">Token usage across your AI tools.</div></div>
+      <${M.button} class="btn btn-sync" whileHover=${{ scale:1.03 }} whileTap=${{ scale:0.96 }} onClick=${syncClaude}>${Ic.sync}Sync Claude Code<//>
+    </div>
+
+    <div class="card" style=${{ marginBottom:'16px' }}>
+      <div class="ctitle"><span class="lbl">Log Usage</span></div>
+      <div class="frow">
+        <div class="fg"><label class="flabel">Tool</label>
+          <select class="fsel" style=${{ minWidth:'152px' }} value=${tool} onChange=${e=>setTool(e.target.value)}>
+            ${Object.keys(TOOLS).map(t => html`<option key=${t}>${t}</option>`)}
+          </select>
+        </div>
+        <div class="fg"><label class="flabel">Tokens</label>
+          <input class="finp" ref=${tokRef} type="number" placeholder="42350" min="1" style=${{ width:'130px' }} onKeyDown=${e=>e.key==='Enter'&&submit()} />
+        </div>
+        <div class="fg" style=${{ flex:1 }}><label class="flabel">Note (optional)</label>
+          <input class="finp" ref=${noteRef} type="text" placeholder="What were you building?" onKeyDown=${e=>e.key==='Enter'&&submit()} />
+        </div>
+        <${M.button} class="btn btn-accent" whileHover=${{ scale:1.03 }} whileTap=${{ scale:0.96 }} onClick=${submit}>Log<//>
+      </div>
+    </div>
+
+    <div class="grid2" style=${{ marginBottom:'16px' }}>
+      <div class="card">
+        <div class="ctitle"><span class="lbl">Token Trend · Last ${range} Days</span></div>
+        <div class="chart-wrap"><${ChartCanvas} deps=${[rev, range]} build=${() => trendConfig(data, range)} /></div>
+      </div>
+      <div class="card">
+        <div class="ctitle"><span class="lbl">By Tool</span></div>
+        <${Donut} data=${data} rev=${rev} id="d2" />
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="ctitle"><span class="lbl">Activity Log</span><span class="note">${all.length?`${all.length} entr${all.length===1?'y':'ies'}`:''}</span></div>
+      <div class="list scroll" style=${{ maxHeight:'320px' }}>
+        ${all.length===0 ? html`<div class="empty">No AI activity logged yet.</div>`
+          : all.map((l,i) => html`<${M.div} class="row" key=${l.id} layout
+              initial=${reduce?false:{ opacity:0, y:8 }} animate=${{ opacity:1, y:0 }} transition=${{ duration:0.26, delay:Math.min(i*0.02,0.25), ease:EASE }}>
+              <span class="badge" style=${{ color:tc(l.tool), borderColor:tc(l.tool), background:tc(l.tool)+'1f' }}>${l.tool}</span>
+              <span class="tok">${fmtNum(l.tokens)}</span>
+              <span class="anote">${l.note||''}</span>
+              <span class="ats">${fmtDateTime(l.ts)}</span>
+              <button class="del" onClick=${()=>removeLog(l.id)}>${Ic.x}</button>
+            <//>`)}
+      </div>
+    </div>
+  </div>`
+}
+
+// ── Manual modal ──
+function ManualModal({ onClose, onSubmit, showToast }) {
+  const today = new Date().toISOString().slice(0,10)
+  const [date, setDate] = useState(today)
+  const [start, setStart] = useState('09:00')
+  const [end, setEnd] = useState('10:00')
+  const [label, setLabel] = useState('')
+  const labelRef = useRef(null)
+  useEffect(() => { setTimeout(() => labelRef.current?.focus(), 80) }, [])
+
+  const startTs = new Date(`${date}T${start}`).getTime()
+  const endTs = new Date(`${date}T${end}`).getTime()
+  const valid = !isNaN(startTs) && !isNaN(endTs) && endTs > startTs
+  const preview = !date||!start||!end ? '' : (endTs<=startTs ? 'End must be after start' : `Duration: ${fmtShort(endTs-startTs)}`)
+
+  const submit = () => {
+    if (!date||!start||!end) { showToast('Fill in date and times'); return }
+    if (isNaN(startTs)||isNaN(endTs)) { showToast('Invalid date or time'); return }
+    if (endTs<=startTs) { showToast('End time must be after start time'); return }
+    if (startTs>Date.now()) { showToast('Session cannot be in the future'); return }
+    onSubmit({ id:'manual-'+Date.now(), label: label.trim()||'Work Session', start:startTs, end:endTs, duration:endTs-startTs, manual:true })
+  }
+  return html`<${M.div} class="overlay" initial=${{ opacity:0 }} animate=${{ opacity:1 }} exit=${{ opacity:0 }} transition=${{ duration:0.18 }} onClick=${e=>e.target===e.currentTarget&&onClose()}>
+    <${M.div} class="modal" initial=${{ opacity:0, scale:0.94, y:10 }} animate=${{ opacity:1, scale:1, y:0 }} exit=${{ opacity:0, scale:0.96, y:8 }} transition=${{ type:'spring', stiffness:380, damping:30 }}>
+      <div class="modal-title">Log Work Session</div>
+      <div class="fg" style=${{ marginBottom:'12px' }}><label class="flabel">Date</label>
+        <input class="finp" type="date" value=${date} onChange=${e=>setDate(e.target.value)} style=${{ width:'100%' }} /></div>
+      <div class="modal-grid">
+        <div class="fg"><label class="flabel">Start Time</label><input class="finp" type="time" value=${start} onChange=${e=>setStart(e.target.value)} /></div>
+        <div class="fg"><label class="flabel">End Time</label><input class="finp" type="time" value=${end} onChange=${e=>setEnd(e.target.value)} /></div>
+      </div>
+      <div class="ml-dur" style=${{ color: (preview.startsWith('End')?'var(--red)':'var(--t3)') }}>${preview}</div>
+      <div class="fg"><label class="flabel">Label</label>
+        <input class="finp" ref=${labelRef} type="text" value=${label} placeholder="What did you work on?" onChange=${e=>setLabel(e.target.value)} onKeyDown=${e=>e.key==='Enter'&&submit()} style=${{ width:'100%' }} /></div>
+      <div class="modal-foot">
+        <${M.button} class="btn btn-ghost btn-sm" whileTap=${{ scale:0.96 }} onClick=${onClose}>Cancel<//>
+        <${M.button} class="btn btn-accent btn-sm" whileTap=${{ scale:0.96 }} onClick=${submit}>Add Session<//>
+      </div>
+    <//>
+  <//>`
+}
+
+// ════════════════════════════ CHART CONFIGS ═════════════════════════════
+function hourlyConfig(data) {
+  const labels = [], d = []
+  for (let h=6; h<=22; h++) {
+    labels.push(h<12?`${h}a`:h===12?'12p':`${h-12}p`)
+    let mins = 0
+    data.sessions.filter(s => sameDay(s.start)).forEach(s => { const sH = new Date(s.start).getHours(), eH = new Date(s.end||Date.now()).getHours(); if (h>=sH && h<=eH) mins += Math.min(60, s.duration/60000) })
+    d.push(Math.min(60, Math.round(mins)))
+  }
+  return { type:'bar', data:{ labels, datasets:[{ data:d, backgroundColor: d.map(v=>v>0?CC.accentS:CC.faint), borderRadius:3, borderSkipped:false }] }, options: cOpts(v=>`${v} min`, 60, 'm') }
+}
+function weeklyConfig(data, n) {
+  const DN = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'], MN = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+  const labels = [], d = []
+  for (let i=n-1; i>=0; i--) { const dt = new Date(); dt.setDate(dt.getDate()-i); dt.setHours(0,0,0,0)
+    labels.push(n<=7?DN[dt.getDay()]:`${dt.getDate()} ${MN[dt.getMonth()]}`)
+    d.push(+(data.sessions.filter(s=>dayKey(s.start)===dayKey(dt.getTime())).reduce((a,s)=>a+s.duration,0)/3600000).toFixed(2)) }
+  const opts = cOpts(v=>`${v.toFixed(1)} h`, undefined, 'h')
+  if (n>14) { opts.scales.x.ticks.maxTicksLimit = 12; opts.scales.x.ticks.autoSkip = true }
+  return { type:'bar', data:{ labels, datasets:[{ data:d, backgroundColor: d.map((_,i)=>i===n-1?CC.accentS:CC.ink16), borderRadius:3, borderSkipped:false }] }, options: opts }
+}
+function trendConfig(data, n) {
+  const DN = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'], MN = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+  const labels = [], d = []
+  for (let i=n-1; i>=0; i--) { const dt = new Date(); dt.setDate(dt.getDate()-i)
+    labels.push(n<=7?DN[dt.getDay()]:`${dt.getDate()} ${MN[dt.getMonth()]}`)
+    d.push(data.aiLogs.filter(l=>dayKey(l.ts)===dayKey(dt.getTime())).reduce((a,l)=>a+l.tokens,0)) }
+  const opts = cOpts(v=>`${fmtNum(v)} tokens`, undefined, '')
+  if (n>14) { opts.scales.x.ticks.maxTicksLimit = 12; opts.scales.x.ticks.autoSkip = true }
+  return { type:'line', data:{ labels, datasets:[{ data:d, tension:0.32, fill:true, borderColor:CC.accent, borderWidth:2, backgroundColor:'rgba(194,242,74,0.08)', pointBackgroundColor:CC.accent, pointBorderColor:CC.surf, pointBorderWidth:1.5, pointRadius:n>14?0:3, pointHoverRadius:5 }] }, options: opts }
+}
+function donutConfig(entries) {
+  if (!entries.length) return { type:'doughnut', data:{ datasets:[{ data:[1], backgroundColor:[CC.faint], borderWidth:0 }] }, options:{ responsive:true, maintainAspectRatio:true, cutout:'70%', plugins:{ legend:{display:false}, tooltip:{enabled:false} } } }
+  const total = entries.reduce((a,e)=>a+e[1],0)
+  return { type:'doughnut', data:{ labels: entries.map(e=>e[0]), datasets:[{ data: entries.map(e=>e[1]), backgroundColor: entries.map(e=>tc(e[0])), borderColor:CC.surf, borderWidth:3, hoverBorderWidth:3 }] },
+    options:{ responsive:true, maintainAspectRatio:true, cutout:'70%', animation:{ animateRotate:true, duration:700 }, plugins:{ legend:{display:false}, tooltip:{ backgroundColor:CC.surf, borderColor:CC.line, borderWidth:1, titleColor:CC.t2, bodyColor:CC.t1, padding:9, cornerRadius:8, displayColors:false, bodyFont:{family:'JetBrains Mono',size:12}, callbacks:{ label:c=>` ${fmtNum(c.raw)} (${((c.raw/total)*100).toFixed(0)}%)` } } } } }
+}
+
+createRoot(document.getElementById('root')).render(html`<${App} />`)
+</script>
+</body>
+</html>
