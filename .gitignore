@@ -7,6 +7,10 @@ worksense-data.json
 # Локальный бэкап старого дизайна
 index_backup_dark.html
 
+# Выхлоп сборки установщика
+release/
+dist/
+
 # Системное и логи
 .DS_Store
 Thumbs.db
