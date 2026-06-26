@@ -60,7 +60,8 @@ function readClaudeStats() {
 }
 
 // ── HTTP server ─────────────────────────────────────────────
-const MIME = { '.html':'text/html', '.js':'text/javascript', '.css':'text/css', '.json':'application/json' }
+const MIME = { '.html':'text/html', '.js':'text/javascript', '.css':'text/css', '.json':'application/json',
+  '.woff2':'font/woff2', '.png':'image/png', '.ico':'image/x-icon', '.svg':'image/svg+xml' }
 
 function cors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
@@ -115,6 +116,16 @@ const server = http.createServer((req, res) => {
       return res.end(html)
     } catch(e) {
       res.writeHead(404); return res.end('index.html not found')
+    }
+  }
+
+  // Static files (assets/app.js, fonts, chart.js, icons …)
+  if (req.method === 'GET') {
+    const rel = decodeURIComponent(req.url.split('?')[0]).replace(/^\/+/, '')
+    const fp = path.join(__dirname, rel)
+    if (fp.startsWith(__dirname) && fs.existsSync(fp) && fs.statSync(fp).isFile()) {
+      res.writeHead(200, { 'Content-Type': MIME[path.extname(fp).toLowerCase()] || 'application/octet-stream' })
+      return res.end(fs.readFileSync(fp))
     }
   }
 
