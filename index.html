@@ -333,6 +333,33 @@ const TOOLS = {
   'ChatGPT': { ch:'#34d6a8' }, 'Copilot': { ch:'#ff7a5c' }, 'Gemini': { ch:'#ffb74d' }, 'Other': { ch:'#8a8a92' }
 }
 const tc = t => (TOOLS[t] || TOOLS['Other']).ch
+
+// Примерная стоимость, USD за 1M токенов (грубая прикидка, не точный счёт)
+const COST = { 'Claude Code':3.5, 'Claude.ai':5, 'Cursor':2, 'ChatGPT':5, 'Copilot':1.5, 'Gemini':2, 'Other':3 }
+const costOf = (tool, tokens) => (tokens/1e6) * (COST[tool] ?? COST['Other'])
+const sumCost = logs => logs.reduce((a,l)=>a+costOf(l.tool, l.tokens), 0)
+const fmtUSD = n => n>=100 ? '$'+Math.round(n) : '$'+n.toFixed(2)
+
+function buildWeeklySummary(data) {
+  const start = weekStart(), wd = weekDaysElapsed()
+  const sess = data.sessions.filter(s => s.start >= start)
+  const totalMs = sess.reduce((a,s)=>a+s.duration,0)
+  const daysWorked = new Set(sess.map(s=>dayKey(s.start))).size
+  const byLabel = {}; sess.forEach(s => byLabel[s.label] = (byLabel[s.label]||0) + s.duration)
+  const top = Object.entries(byLabel).sort((a,b)=>b[1]-a[1]).slice(0,5)
+  const prevStart = start - 7*86400000
+  const prevMs = data.sessions.filter(s=>s.start>=prevStart && s.start<start).reduce((a,s)=>a+s.duration,0)
+  const logs = data.aiLogs.filter(l=>l.ts>=start)
+  const tok = logs.reduce((a,l)=>a+l.tokens,0)
+  const monLabel = new Date(start).toLocaleDateString('en-US',{month:'long',day:'numeric'})
+  const lines = []
+  lines.push(`WorkSense, week of ${monLabel}`)
+  lines.push(`Total: ${fmtShort(totalMs)} across ${daysWorked} day${daysWorked!==1?'s':''} (avg ${(totalMs/wd/3600000).toFixed(1)}h/day)`)
+  if (prevMs > 0) { const diff = Math.round((totalMs-prevMs)/prevMs*100); lines.push(`vs last week: ${diff>=0?'+':''}${diff}%`) }
+  if (top.length) { lines.push(''); lines.push('Top work:'); top.forEach(([l,ms])=>lines.push(`  - ${l}: ${fmtShort(ms)}`)) }
+  if (tok > 0) { lines.push(''); lines.push(`AI usage: ${fmtNum(tok)} tokens (approx ${fmtUSD(sumCost(logs))})`) }
+  return lines.join('\n')
+}
 const CC = { t1:'#f1f1ee', t2:'#9b9ba4', t3:'#64646d', accent:'#c2f24a', accentS:'rgba(194,242,74,0.85)', surf:'#1a1a1f', line:'rgba(255,255,255,0.09)', grid:'rgba(255,255,255,0.05)', faint:'rgba(255,255,255,0.05)', ink16:'rgba(255,255,255,0.16)' }
 const EASE = [0.22, 1, 0.36, 1]
 
@@ -346,7 +373,9 @@ const Ic = {
   stop: html`<svg viewBox="0 0 14 14" fill="currentColor"><rect x="3" y="3" width="8" height="8" rx="1.6"/></svg>`,
   pause: html`<svg viewBox="0 0 14 14" fill="currentColor"><rect x="3.4" y="2.8" width="2.6" height="8.4" rx="1"/><rect x="8" y="2.8" width="2.6" height="8.4" rx="1"/></svg>`,
   plus: html`<svg viewBox="0 0 14 14" fill="none"><path d="M7 2.6v8.8M2.6 7h8.8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`,
-  sync: html`<svg viewBox="0 0 14 14" fill="none"><path d="M11.5 7a4.5 4.5 0 1 1-1.3-3.2M11.5 2v2.8H8.7" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+  sync: html`<svg viewBox="0 0 14 14" fill="none"><path d="M11.5 7a4.5 4.5 0 1 1-1.3-3.2M11.5 2v2.8H8.7" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  edit: html`<svg viewBox="0 0 14 14" fill="none"><path d="M9.4 2.5l2.1 2.1M8.5 3.4l-5.2 5.2-.7 2.5 2.5-.7 5.2-5.2a1.1 1.1 0 0 0 0-1.5l-.6-.6a1.1 1.1 0 0 0-1.5 0Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>`,
+  copy: html`<svg viewBox="0 0 14 14" fill="none"><rect x="4.6" y="4.6" width="6.4" height="6.4" rx="1.4" stroke="currentColor" stroke-width="1.2"/><path d="M9 4.3V3.6A1.4 1.4 0 0 0 7.6 2.2H3.9A1.4 1.4 0 0 0 2.5 3.6v3.7A1.4 1.4 0 0 0 3.9 8.7h.7" stroke="currentColor" stroke-width="1.2"/></svg>`
 }
 
 // ════════════════════════════════ CHART ═════════════════════════════════
@@ -400,6 +429,8 @@ function App() {
   const [range, setRange] = useState(14)
   const [toast, setToast] = useState(null)
   const [modal, setModal] = useState(false)
+  const [editTarget, setEditTarget] = useState(null)
+  const [report, setReport] = useState(null)
   const [claudeBanner, setClaudeBanner] = useState(null)
 
   // timer
@@ -432,6 +463,7 @@ function App() {
 
   const bump = () => setRev(r => r + 1)
   const addSession = s => { setData(d => ({ ...d, sessions: [...d.sessions, s] })); bump() }
+  const updateSession = s => { setData(d => ({ ...d, sessions: d.sessions.map(x => x.id===s.id ? s : x) })); bump() }
   const removeSession = id => { setData(d => ({ ...d, sessions: d.sessions.filter(s => s.id !== id) })); bump() }
   const addLog = l => { setData(d => ({ ...d, aiLogs: [...d.aiLogs, l] })); bump() }
   const removeLog = id => { setData(d => ({ ...d, aiLogs: d.aiLogs.filter(l => l.id !== id) })); bump() }
@@ -511,12 +543,29 @@ function App() {
     addLog({ id: Date.now().toString(), tool, tokens, note, ts: Date.now() })
     showToast(html`Logged <span class="tk">${fmtNum(tokens)}</span> ${tool} tokens`)
   }
-  const submitManual = (s) => { addSession(s); setModal(false); showToast(html`Added <span class="tk">${fmtShort(s.duration)}</span> — ${s.label}`) }
+  const closeModal = () => { setModal(false); setEditTarget(null) }
+  const openNew = () => { setEditTarget(null); setModal(true) }
+  const openEdit = (s) => { setEditTarget(s); setModal(true) }
+  const submitManual = (s) => {
+    if (editTarget) { updateSession(s); showToast(html`Updated <span class="tk">${fmtShort(s.duration)}</span>`) }
+    else { addSession(s); showToast(html`Added <span class="tk">${fmtShort(s.duration)}</span>`) }
+    closeModal()
+  }
   const exportData = () => {
     const blob = new Blob([JSON.stringify(data, null, 2)], { type:'application/json' })
     const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download:`worksense-${dayKey(Date.now())}.json` })
     a.click(); URL.revokeObjectURL(a.href); showToast('Data exported')
   }
+  const exportCSV = () => {
+    const esc = c => { const s = String(c==null?'':c); return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s }
+    const rows = [['date','start','end','duration_min','label'],
+      ...[...data.sessions].sort((a,b)=>a.start-b.start).map(s => [dayKey(s.start), fmtTime(s.start), s.end?fmtTime(s.end):'', Math.round(s.duration/60000), s.label])]
+    const csv = rows.map(r => r.map(esc).join(',')).join('\n')
+    const blob = new Blob([csv], { type:'text/csv' })
+    const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download:`worksense-sessions-${dayKey(Date.now())}.csv` })
+    a.click(); URL.revokeObjectURL(a.href); showToast('Sessions exported to CSV')
+  }
+  const openReport = () => setReport(buildWeeklySummary(data))
 
   // ── keyboard ──
   useEffect(() => {
@@ -527,8 +576,8 @@ function App() {
       if ((e.ctrlKey||e.metaKey) && k==='1') setView('dashboard')
       if ((e.ctrlKey||e.metaKey) && k==='2') setView('sessions')
       if ((e.ctrlKey||e.metaKey) && k==='3') setView('ai')
-      if ((e.ctrlKey||e.metaKey) && (k==='l'||k==='L')) { e.preventDefault(); setModal(true) }
-      if (k==='Escape') setModal(false)
+      if ((e.ctrlKey||e.metaKey) && (k==='l'||k==='L')) { e.preventDefault(); setEditTarget(null); setModal(true) }
+      if (k==='Escape') { setModal(false); setEditTarget(null); setReport(null) }
     }
     window.addEventListener('keydown', h)
     return () => window.removeEventListener('keydown', h)
@@ -547,11 +596,12 @@ function App() {
             ${view==='dashboard' && html`<${ViewWrap} key="d">
               <${Dashboard} data=${data} rev=${rev} range=${range} setRange=${setRange}
                 timer=${timer} elapsed=${elapsed} clockStr=${clockStr} running=${running}
-                toggleTimer=${toggleTimer} togglePause=${togglePause} openModal=${()=>setModal(true)}
+                toggleTimer=${toggleTimer} togglePause=${togglePause} openModal=${openNew}
                 sinputRef=${sinputRef} claudeBanner=${claudeBanner} syncClaude=${syncClaude} reduce=${reduce} />
             <//>`}
             ${view==='sessions' && html`<${ViewWrap} key="s">
-              <${Sessions} data=${data} removeSession=${removeSession} openModal=${()=>setModal(true)} exportData=${exportData} reduce=${reduce} />
+              <${Sessions} data=${data} removeSession=${removeSession} openModal=${openNew} openEdit=${openEdit}
+                exportData=${exportData} exportCSV=${exportCSV} openReport=${openReport} reduce=${reduce} />
             <//>`}
             ${view==='ai' && html`<${ViewWrap} key="a">
               <${AIView} data=${data} rev=${rev} range=${range} logAI=${logAI} removeLog=${removeLog} syncClaude=${syncClaude} reduce=${reduce} />
@@ -561,7 +611,10 @@ function App() {
       </div>
 
       <${AnimatePresence}>
-        ${modal && html`<${ManualModal} key="m" onClose=${()=>setModal(false)} onSubmit=${submitManual} showToast=${showToast} />`}
+        ${modal && html`<${ManualModal} key="m" editing=${editTarget} onClose=${closeModal} onSubmit=${submitManual} showToast=${showToast} />`}
+      <//>
+      <${AnimatePresence}>
+        ${report && html`<${ReportModal} key="r" text=${report} onClose=${()=>setReport(null)} showToast=${showToast} />`}
       <//>
       <${AnimatePresence}>
         ${toast && html`<${M.div} key="t" class="toast" initial=${{ opacity:0, y:20, x:'-50%' }} animate=${{ opacity:1, y:0, x:'-50%' }} exit=${{ opacity:0, y:12, x:'-50%' }} transition=${{ duration:0.28, ease:EASE }}>${toast}<//>`}
@@ -618,7 +671,8 @@ function Dashboard({ data, rev, range, setRange, timer, elapsed, clockStr, runni
     const days = new Set(data.sessions.map(s => dayKey(s.start)))
     let streak = 0; const d = new Date()
     for (let i=0;i<365;i++){ if (days.has(dayKey(d.getTime()))) { streak++; d.setDate(d.getDate()-1) } else break }
-    return { todaySess, todayMs, wkMs, todayLogs, todayTok, streak, weekDays: weekDaysElapsed() }
+    const todayCost = sumCost(todayLogs)
+    return { todaySess, todayMs, wkMs, todayLogs, todayTok, todayCost, streak, weekDays: weekDaysElapsed() }
   }, [rev])
 
   const stagger = reduce ? {} : { animate:'show', initial:'hidden', variants:{ show:{ transition:{ staggerChildren:0.06, delayChildren:0.05 } } } }
@@ -655,7 +709,7 @@ function Dashboard({ data, rev, range, setRange, timer, elapsed, clockStr, runni
     <${M.section} class="ledger" ...${item}>
       <${Stat} label="Today" value=${stats.todayMs} format=${fmtHM} sub=${`${stats.todaySess.length} session${stats.todaySess.length!==1?'s':''}`} />
       <${Stat} label="This Week" value=${stats.wkMs} format=${v=>`${(v/3600000).toFixed(1)}h`} sub=${`avg ${(stats.wkMs/stats.weekDays/3600000).toFixed(1)}h/day`} />
-      <${Stat} label="AI Tokens Today" value=${stats.todayTok} format=${fmtNum} sub=${`${stats.todayLogs.length} request${stats.todayLogs.length!==1?'s':''}`} />
+      <${Stat} label="AI Tokens Today" value=${stats.todayTok} format=${fmtNum} sub=${`${stats.todayLogs.length} req · ≈ ${fmtUSD(stats.todayCost)}`} />
       <${Stat} label="Work Streak" value=${stats.streak} format=${v=>String(Math.round(v))} sub="days in a row" />
     <//>
 
@@ -781,20 +835,26 @@ function Heatmap({ data, rev }) {
 }
 
 // ── Sessions view ──
-function Sessions({ data, removeSession, openModal, exportData, reduce }) {
+function Sessions({ data, removeSession, openModal, openEdit, exportData, exportCSV, openReport, reduce }) {
+  const [q, setQ] = useState('')
   const groups = useMemo(() => {
-    const g = {}; [...data.sessions].reverse().forEach(s => { const k = dayKey(s.start); (g[k] ||= []).push(s) }); return g
-  }, [data.sessions])
+    const term = q.trim().toLowerCase()
+    const src = term ? data.sessions.filter(s => s.label.toLowerCase().includes(term)) : data.sessions
+    const g = {}; [...src].reverse().forEach(s => { const k = dayKey(s.start); (g[k] ||= []).push(s) }); return g
+  }, [data.sessions, q])
   const keys = Object.keys(groups)
   return html`<div>
     <div class="vhead">
       <div><div class="vtitle">Work Sessions</div><div class="vsub">Every tracked and logged work block.</div></div>
-      <div style=${{ display:'flex', gap:'9px' }}>
+      <div style=${{ display:'flex', gap:'8px', flexWrap:'wrap', justifyContent:'flex-end' }}>
         <${M.button} class="btn btn-accent btn-sm" whileHover=${{ scale:1.03 }} whileTap=${{ scale:0.96 }} onClick=${openModal}>${Ic.plus}Add Session<//>
-        <${M.button} class="btn btn-ghost btn-sm" whileHover=${{ scale:1.03 }} whileTap=${{ scale:0.96 }} onClick=${exportData}>Export JSON<//>
+        <${M.button} class="btn btn-soft btn-sm" whileHover=${{ scale:1.03 }} whileTap=${{ scale:0.96 }} onClick=${openReport}>Weekly Summary<//>
+        <${M.button} class="btn btn-ghost btn-sm" whileHover=${{ scale:1.03 }} whileTap=${{ scale:0.96 }} onClick=${exportCSV}>CSV<//>
+        <${M.button} class="btn btn-ghost btn-sm" whileHover=${{ scale:1.03 }} whileTap=${{ scale:0.96 }} onClick=${exportData}>JSON<//>
       </div>
     </div>
-    ${keys.length===0 ? html`<div class="empty" style=${{ padding:'48px' }}>No sessions yet. Start the timer.</div>`
+    <input class="finp" style=${{ width:'100%', marginBottom:'18px' }} placeholder="Search by label" value=${q} onChange=${e=>setQ(e.target.value)} />
+    ${keys.length===0 ? html`<div class="empty" style=${{ padding:'48px' }}>${q.trim()?'Nothing matches your search.':'No sessions yet. Start the timer.'}</div>`
       : keys.map(dk => html`<div class="daygrp" key=${dk}>
           <div class="daylbl"><span class="dayname">${fmtDayLabel(dk)}</span><span class="daytot">${fmtShort(groups[dk].reduce((a,s)=>a+s.duration,0))}</span></div>
           <div class="list">
@@ -804,7 +864,8 @@ function Sessions({ data, removeSession, openModal, exportData, reduce }) {
               <span class="name">${s.label}</span>
               <span class="rng">${fmtTime(s.start)}${s.end?'–'+fmtTime(s.end):''}</span>
               <span class="dur">${fmtShort(s.duration)}</span>
-              <button class="del" onClick=${()=>removeSession(s.id)}>${Ic.x}</button>
+              <button class="del" title="Edit" onClick=${()=>openEdit(s)}>${Ic.edit}</button>
+              <button class="del" title="Delete" onClick=${()=>removeSession(s.id)}>${Ic.x}</button>
             <//>`)}
           </div>
         </div>`)}
@@ -822,9 +883,11 @@ function AIView({ data, rev, range, logAI, removeLog, syncClaude, reduce }) {
     tokRef.current.value = ''; noteRef.current.value = ''
   }
   const all = [...data.aiLogs].reverse()
+  const rangeStart = (()=>{ const d=new Date(); d.setDate(d.getDate()-(range-1)); d.setHours(0,0,0,0); return d.getTime() })()
+  const rangeCost = sumCost(data.aiLogs.filter(l=>l.ts>=rangeStart))
   return html`<div>
     <div class="vhead">
-      <div><div class="vtitle">AI Activity</div><div class="vsub">Token usage across your AI tools.</div></div>
+      <div><div class="vtitle">AI Activity</div><div class="vsub">Token usage across your AI tools. Cost is a rough estimate.</div></div>
       <${M.button} class="btn btn-sync" whileHover=${{ scale:1.03 }} whileTap=${{ scale:0.96 }} onClick=${syncClaude}>${Ic.sync}Sync Claude Code<//>
     </div>
 
@@ -848,7 +911,7 @@ function AIView({ data, rev, range, logAI, removeLog, syncClaude, reduce }) {
 
     <div class="grid2" style=${{ marginBottom:'16px' }}>
       <div class="card">
-        <div class="ctitle"><span class="lbl">Token Trend · Last ${range} Days</span></div>
+        <div class="ctitle"><span class="lbl">Token Trend · Last ${range} Days</span><span class="note">≈ ${fmtUSD(rangeCost)}</span></div>
         <div class="chart-wrap"><${ChartCanvas} deps=${[rev, range]} build=${() => trendConfig(data, range)} /></div>
       </div>
       <div class="card">
@@ -874,19 +937,20 @@ function AIView({ data, rev, range, logAI, removeLog, syncClaude, reduce }) {
   </div>`
 }
 
-// ── Manual modal ──
-function ManualModal({ onClose, onSubmit, showToast }) {
-  const today = new Date().toISOString().slice(0,10)
-  const [date, setDate] = useState(today)
-  const [start, setStart] = useState('09:00')
-  const [end, setEnd] = useState('10:00')
-  const [label, setLabel] = useState('')
+// ── Manual / edit modal ──
+function ManualModal({ editing, onClose, onSubmit, showToast }) {
+  const init = editing
+    ? { date: dayKey(editing.start), start: fmtTime(editing.start), end: fmtTime(editing.end || editing.start + editing.duration), label: editing.label }
+    : { date: new Date().toISOString().slice(0,10), start: '09:00', end: '10:00', label: '' }
+  const [date, setDate] = useState(init.date)
+  const [start, setStart] = useState(init.start)
+  const [end, setEnd] = useState(init.end)
+  const [label, setLabel] = useState(init.label)
   const labelRef = useRef(null)
   useEffect(() => { setTimeout(() => labelRef.current?.focus(), 80) }, [])
 
   const startTs = new Date(`${date}T${start}`).getTime()
   const endTs = new Date(`${date}T${end}`).getTime()
-  const valid = !isNaN(startTs) && !isNaN(endTs) && endTs > startTs
   const preview = !date||!start||!end ? '' : (endTs<=startTs ? 'End must be after start' : `Duration: ${fmtShort(endTs-startTs)}`)
 
   const submit = () => {
@@ -894,11 +958,11 @@ function ManualModal({ onClose, onSubmit, showToast }) {
     if (isNaN(startTs)||isNaN(endTs)) { showToast('Invalid date or time'); return }
     if (endTs<=startTs) { showToast('End time must be after start time'); return }
     if (startTs>Date.now()) { showToast('Session cannot be in the future'); return }
-    onSubmit({ id:'manual-'+Date.now(), label: label.trim()||'Work Session', start:startTs, end:endTs, duration:endTs-startTs, manual:true })
+    onSubmit({ id: editing ? editing.id : 'manual-'+Date.now(), label: label.trim()||'Work Session', start:startTs, end:endTs, duration:endTs-startTs, manual:true })
   }
   return html`<${M.div} class="overlay" initial=${{ opacity:0 }} animate=${{ opacity:1 }} exit=${{ opacity:0 }} transition=${{ duration:0.18 }} onClick=${e=>e.target===e.currentTarget&&onClose()}>
     <${M.div} class="modal" initial=${{ opacity:0, scale:0.94, y:10 }} animate=${{ opacity:1, scale:1, y:0 }} exit=${{ opacity:0, scale:0.96, y:8 }} transition=${{ type:'spring', stiffness:380, damping:30 }}>
-      <div class="modal-title">Log Work Session</div>
+      <div class="modal-title">${editing ? 'Edit Session' : 'Log Work Session'}</div>
       <div class="fg" style=${{ marginBottom:'12px' }}><label class="flabel">Date</label>
         <input class="finp" type="date" value=${date} onChange=${e=>setDate(e.target.value)} style=${{ width:'100%' }} /></div>
       <div class="modal-grid">
@@ -910,7 +974,25 @@ function ManualModal({ onClose, onSubmit, showToast }) {
         <input class="finp" ref=${labelRef} type="text" value=${label} placeholder="What did you work on?" onChange=${e=>setLabel(e.target.value)} onKeyDown=${e=>e.key==='Enter'&&submit()} style=${{ width:'100%' }} /></div>
       <div class="modal-foot">
         <${M.button} class="btn btn-ghost btn-sm" whileTap=${{ scale:0.96 }} onClick=${onClose}>Cancel<//>
-        <${M.button} class="btn btn-accent btn-sm" whileTap=${{ scale:0.96 }} onClick=${submit}>Add Session<//>
+        <${M.button} class="btn btn-accent btn-sm" whileTap=${{ scale:0.96 }} onClick=${submit}>${editing ? 'Save' : 'Add Session'}<//>
+      </div>
+    <//>
+  <//>`
+}
+
+// ── Weekly report modal ──
+function ReportModal({ text, onClose, showToast }) {
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(text); showToast('Copied to clipboard') }
+    catch (e) { showToast('Copy failed') }
+  }
+  return html`<${M.div} class="overlay" initial=${{ opacity:0 }} animate=${{ opacity:1 }} exit=${{ opacity:0 }} transition=${{ duration:0.18 }} onClick=${e=>e.target===e.currentTarget&&onClose()}>
+    <${M.div} class="modal" style=${{ width:'480px' }} initial=${{ opacity:0, scale:0.94, y:10 }} animate=${{ opacity:1, scale:1, y:0 }} exit=${{ opacity:0, scale:0.96, y:8 }} transition=${{ type:'spring', stiffness:380, damping:30 }}>
+      <div class="modal-title">Weekly Summary</div>
+      <textarea class="finp" readonly value=${text} style=${{ width:'100%', height:'210px', resize:'none', fontFamily:'var(--fm)', fontSize:'12.5px', lineHeight:'1.65', whiteSpace:'pre', overflow:'auto' }}></textarea>
+      <div class="modal-foot">
+        <${M.button} class="btn btn-ghost btn-sm" whileTap=${{ scale:0.96 }} onClick=${onClose}>Close<//>
+        <${M.button} class="btn btn-accent btn-sm" whileTap=${{ scale:0.96 }} onClick=${copy}>${Ic.copy}Copy<//>
       </div>
     <//>
   <//>`

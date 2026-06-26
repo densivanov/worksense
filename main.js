@@ -31,6 +31,11 @@ function createWindow() {
     mainWindow.show()
   })
 
+  // Закрытие окна сворачивает в трей, реальный выход только из меню трея
+  mainWindow.on('close', (e) => {
+    if (!app.isQuitting) { e.preventDefault(); mainWindow.hide() }
+  })
+
   if (process.argv.includes('--dev')) {
     mainWindow.webContents.openDevTools({ mode: 'detach' })
   }
@@ -126,15 +131,39 @@ ipcMain.on('timer-update', (event, status) => {
   }
 })
 
+// ── Tray + фоновый режим ──────────────────────────────────────
+function showWindow() {
+  if (mainWindow && !mainWindow.isDestroyed()) { mainWindow.show(); mainWindow.focus() }
+  else createWindow()
+}
+
+function createTray() {
+  if (tray) return
+  let img
+  try { img = nativeImage.createFromPath(path.join(__dirname, 'icon.png')).resize({ width: 16, height: 16 }) }
+  catch (e) { img = nativeImage.createEmpty() }
+  tray = new Tray(img)
+  tray.setToolTip('WorkSense')
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: 'Открыть WorkSense', click: showWindow },
+    { type: 'separator' },
+    { label: 'Выход', click: () => { app.isQuitting = true; app.quit() } }
+  ]))
+  tray.on('click', showWindow)
+  tray.on('double-click', showWindow)
+}
+
 // ── App lifecycle ─────────────────────────────────────────────
 app.whenReady().then(() => {
   createWindow()
+  createTray()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    else showWindow()
   })
 })
 
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit()
-})
+// Окно сворачивается в трей, приложение продолжает работать в фоне.
+// Полный выход только через пункт «Выход» в меню трея.
+app.on('window-all-closed', () => {})
